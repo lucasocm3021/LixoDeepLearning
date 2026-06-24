@@ -1,72 +1,144 @@
-# ReciclaAI — Classificador de Resíduos
+# ReciclaAI ♻️
 
-Pipeline completo: organizar dataset → treinar (ResNet18 + transfer learning) → servir um front-end para classificar imagens.
+Classificador de resíduos recicláveis usando *deep learning*. O modelo (ResNet18 com *transfer learning*) é treinado para reconhecer 6 categorias de resíduo — **papelão, vidro, metal, papel, plástico e rejeito** — e um front-end web simples permite enviar uma foto e ver a previsão na hora.
 
-## 1. Estrutura de arquivos
+## Sumário
+
+- [Sobre o projeto](#sobre-o-projeto)
+- [Estrutura do repositório](#estrutura-do-repositório)
+- [Pré-requisitos](#pré-requisitos)
+- [Passo a passo](#passo-a-passo)
+  - [1. Clonar o repositório](#1-clonar-o-repositório)
+  - [2. Criar o ambiente virtual](#2-criar-o-ambiente-virtual)
+  - [3. Instalar as dependências](#3-instalar-as-dependências)
+  - [4. Baixar e organizar o dataset](#4-baixar-e-organizar-o-dataset)
+  - [5. Treinar o modelo](#5-treinar-o-modelo)
+  - [6. Rodar o front-end](#6-rodar-o-front-end)
+- [Solução de problemas](#solução-de-problemas)
+
+## Sobre o projeto
+
+O pipeline tem três etapas:
+
+1. **`split_dataset.py`** organiza as imagens baixadas do Kaggle na estrutura de pastas que o treino espera (`train/` e `test/`).
+2. **`treino.py`** treina uma ResNet18 pré-treinada (congelando as camadas convolucionais e treinando só a camada final) e salva o modelo em `model/reciclaai.pth`.
+3. **`app.py`** carrega esse modelo e expõe uma página web (`templates/index.html`) onde qualquer pessoa pode arrastar uma foto e ver a categoria prevista, com o nível de confiança de cada classe.
+
+## Estrutura do repositório
 
 ```
-reciclaai/
+ReciclaAI/
 ├── split_dataset.py     # organiza o dataset do Kaggle em train/test
 ├── treino.py             # treina o modelo
 ├── app.py                 # backend Flask (carrega o modelo e expõe /predict)
 ├── templates/
 │   └── index.html         # front-end de upload
 ├── requirements.txt
-└── model/                 # criado automaticamente, guarda reciclaai.pth
+├── .gitignore
+└── README.md
 ```
 
-## 2. Ambiente
+> As pastas `dataset/`, `model/` e `venv/` **não fazem parte do repositório** (estão no `.gitignore`) — você as gera localmente seguindo os passos abaixo.
+
+## Pré-requisitos
+
+- [Python 3.10+](https://www.python.org/downloads/)
+- [Git](https://git-scm.com/downloads)
+- Conta gratuita no [Kaggle](https://www.kaggle.com/) para baixar o dataset
+- *(opcional, recomendado)* GPU NVIDIA com driver atualizado — o treino roda em CPU também, só é mais lento
+
+## Passo a passo
+
+### 1. Clonar o repositório
 
 ```bash
-python -m venv venv
-# Windows: venv\Scripts\activate
-# Linux/Mac: source venv/bin/activate
+git clone https://github.com/<seu-usuario>/ReciclaAI.git
+cd ReciclaAI
+```
 
+### 2. Criar o ambiente virtual
+
+O ambiente virtual isola as dependências deste projeto do resto da sua máquina.
+
+**Windows (PowerShell):**
+```powershell
+python -m venv venv
+venv\Scripts\activate
+```
+
+**Linux / macOS:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+O prompt deve passar a mostrar `(venv)` no início da linha quando o ambiente estiver ativo. Repita a ativação a cada nova sessão do terminal.
+
+### 3. Instalar as dependências
+
+**Se você tem GPU NVIDIA** (recomendado — o treino fica bem mais rápido):
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip install flask pillow
+```
+
+**Se você não tem GPU (ou não sabe):**
+```bash
 pip install -r requirements.txt
 ```
 
-**GPU (recomendado):** se sua máquina tem uma GPU NVIDIA, instale o PyTorch com suporte a CUDA *antes* de rodar o requirements.txt, seguindo o seletor em https://pytorch.org/get-started/locally/ (escolha a versão do CUDA da sua placa). Sem isso, o `torch` instala a versão CPU-only e o treino fica bem mais lento.
+> ⚠️ No Windows e macOS, `pip install torch` sozinho **sempre instala a versão CPU-only**, mesmo que você tenha uma GPU NVIDIA. Por isso o comando com `--index-url` acima é necessário para usar a GPU.
 
-Confirme que a GPU foi detectada:
+Confirme se a GPU foi detectada:
 ```bash
-python -c "import torch; print(torch.cuda.is_available())"
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+Deve aparecer `True` no final. Se aparecer `False` mesmo tendo GPU, veja a seção [Solução de problemas](#solução-de-problemas).
+
+### 4. Baixar e organizar o dataset
+
+Baixe o dataset **[Garbage Classification](https://www.kaggle.com/datasets/asdasdasasdas/garbage-classification)** no Kaggle (são ~2.500 imagens em 6 pastas: `cardboard`, `glass`, `metal`, `paper`, `plastic`, `trash`) e extraia o `.zip` em algum lugar da sua máquina.
+
+Depois, rode o script de organização para dividir em treino/teste:
+```bash
+python split_dataset.py --source "C:\caminho\para\o\dataset\extraido" --dest dataset --test-size 0.2
 ```
 
-## 3. Organizar o dataset do Kaggle
+Isso cria a pasta `dataset/` (ignorada pelo Git) com `train/` e `test/`, cada uma com as 6 subpastas de classe.
 
-O dataset que você baixou tem uma pasta por classe (cardboard, glass, metal, paper, plastic, trash), sem divisão train/test. O `treino.py` espera `dataset/train/<classe>` e `dataset/test/<classe>`, então rode:
-
-```bash
-python split_dataset.py --source "C:\caminho\para\o\dataset\baixado" --dest dataset --test-size 0.2
-```
-
-Isso copia ~80% das imagens de cada classe para `dataset/train/` e ~20% para `dataset/test/`. Use `--move` em vez de copiar se quiser economizar espaço em disco.
-
-## 4. Treinar
+### 5. Treinar o modelo
 
 ```bash
 python treino.py
 ```
 
-Otimizações já aplicadas no script (em relação ao original) para rodar mais rápido sem mudar a arquitetura:
-- `torch.backends.cudnn.benchmark = True` quando há GPU (as imagens são sempre 224x224, então o cuDNN pode escolher o melhor algoritmo de convolução).
-- `DataLoader` com `num_workers=4` e `pin_memory=True`: carrega os próximos lotes em paralelo enquanto a GPU treina o lote atual, em vez de ficar esperando o disco.
-- **Mixed precision (AMP)** com `torch.amp.autocast` + `GradScaler`: faz a maior parte das contas em float16 na GPU, normalmente ~1.5–2x mais rápido e usando menos memória, sem perda perceptível de acurácia.
-- `non_blocking=True` ao mover tensores para a GPU.
+O treino imprime a acurácia de treino e teste a cada época e, ao final, salva o modelo em `model/reciclaai.pth`. Em GPU costuma levar poucos minutos; em CPU pode levar bem mais tempo dependendo do tamanho do dataset.
 
-Outras dicas que dependem da sua máquina:
-- Se tiver bastante VRAM livre, aumente `BATCH_SIZE` em `treino.py` (ex.: 64 ou 128) — acelera o treino ao custo de mais memória.
-- No Windows, se o `DataLoader` travar ou der erro de multiprocessing, mude `NUM_WORKERS` para `0`.
-- Como só a camada `fc` é treinada (o resto do ResNet18 está congelado), 8 épocas costumam ser suficientes; acompanhe `Test Acc` no log e pare antes se ela parar de melhorar.
-
-Ao final, o modelo é salvo em `model/reciclaai.pth`.
-
-## 5. Rodar o front-end
+### 6. Rodar o front-end
 
 ```bash
 python app.py
 ```
 
-Acesse **http://localhost:5000** no navegador. Arraste ou selecione uma foto de um resíduo e clique em "Classificar" — o backend roda a inferência com o modelo treinado e devolve a categoria prevista com o nível de confiança de cada classe.
+Acesse **http://localhost:5000** no navegador. Arraste ou selecione a foto de um resíduo e clique em **Classificar** — o backend roda a inferência com o modelo treinado e mostra a categoria prevista com o nível de confiança de cada classe.
 
-> O `app.py` precisa que `model/reciclaai.pth` já exista (passo 4) antes de iniciar.
+> O `app.py` só funciona depois do passo 5 — ele procura o arquivo `model/reciclaai.pth`.
+
+## Solução de problemas
+
+**`ModuleNotFoundError: No module named 'torch'`**
+O ambiente virtual está ativo (`(venv)` aparece no prompt) mas as dependências não foram instaladas nele. Repita o passo 3 com o venv ativo.
+
+**`torch.cuda.is_available()` retorna `False` mesmo com GPU NVIDIA**
+Você instalou a build CPU-only por engano. Reinstale apontando para o índice certo:
+```bash
+pip uninstall torch torchvision torchaudio -y
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+```
+Se `nvidia-smi` (no terminal) não reconhecer o comando, sua máquina não tem GPU NVIDIA disponível — o projeto funciona em CPU, só mais lento.
+
+**`FileNotFoundError: Modelo não encontrado em model/reciclaai.pth`**
+Você ainda não rodou o passo 5 (`python treino.py`), ou rodou em outra pasta. O `app.py` precisa ser executado na raiz do projeto.
+
+**`FileNotFoundError` ao rodar `treino.py` (pasta `dataset/train` não existe)**
+Volte ao passo 4 — o dataset baixado do Kaggle precisa passar pelo `split_dataset.py` antes, já que ele vem sem divisão treino/teste.
