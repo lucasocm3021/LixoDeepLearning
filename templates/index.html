@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReciclaAI — Classificador de Resíduos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --card: #ffffff;
+    --ink: #1f2421;
+    --muted: #6b6f6a;
+    --line: #e4e0d6;
+    --leaf: #3a5a40;
+    --leaf-dark: #2c4632;
+    --accent: #b08968;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    padding: 32px 16px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 32px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+
+  header {
+    margin-bottom: 24px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--leaf);
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 26px;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  p.subtitle {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  #dropzone {
+    border: 2px dashed var(--line);
+    border-radius: 14px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+    position: relative;
+  }
+
+  #dropzone.dragover {
+    border-color: var(--leaf);
+    background: #f1f5ee;
+  }
+
+  #dropzone svg {
+    width: 28px;
+    height: 28px;
+    stroke: var(--leaf);
+    margin-bottom: 10px;
+  }
+
+  #dropzone .hint {
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  #dropzone .hint-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  #fileInput { display: none; }
+
+  #previewWrap {
+    margin-top: 16px;
+    display: none;
+  }
+
+  #previewWrap img {
+    width: 100%;
+    max-height: 240px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    display: block;
+  }
+
+  button#classifyBtn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    background: var(--leaf);
+    color: #fff;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    display: none;
+  }
+
+  button#classifyBtn:hover { background: var(--leaf-dark); }
+  button#classifyBtn:disabled { background: #aab3a4; cursor: default; }
+
+  #result {
+    margin-top: 20px;
+    display: none;
+  }
+
+  .result-chip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border-left: 5px solid var(--accent);
+    background: #fafaf8;
+  }
+
+  .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .result-chip .label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+  }
+
+  .result-chip .confidence {
+    margin-left: auto;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .ranking {
+    margin-top: 12px;
+  }
+
+  .rank-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 4px 0;
+  }
+
+  .rank-row .name { width: 70px; flex-shrink: 0; }
+
+  .bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  .rank-row .pct { width: 38px; text-align: right; flex-shrink: 0; }
+
+  #errorMsg {
+    display: none;
+    margin-top: 14px;
+    font-size: 13px;
+    color: #b3261e;
+  }
+
+  footer {
+    margin-top: 22px;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <header>
+    <p class="eyebrow">ReciclaAI</p>
+    <h1>Para qual lixeira isso vai?</h1>
+    <p class="subtitle">Envie a foto de um resíduo e o modelo indica a categoria correta.</p>
+  </header>
+
+  <div id="dropzone">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 16V4M12 4l-4 4M12 4l4 4"/>
+      <path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/>
+    </svg>
+    <div class="hint">Arraste uma imagem ou clique para escolher</div>
+    <div class="hint-sub">JPG ou PNG</div>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div id="previewWrap">
+    <img id="previewImg" alt="Pré-visualização da imagem enviada">
+  </div>
+
+  <button id="classifyBtn">Classificar</button>
+
+  <div id="errorMsg"></div>
+
+  <div id="result">
+    <div class="result-chip" id="resultChip">
+      <span class="dot" id="resultDot"></span>
+      <span class="label" id="resultLabel"></span>
+      <span class="confidence" id="resultConfidence"></span>
+    </div>
+    <div class="ranking" id="ranking"></div>
+  </div>
+
+  <footer>Modelo: ResNet18 com transfer learning · 6 categorias</footer>
+</div>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const previewWrap = document.getElementById('previewWrap');
+  const previewImg = document.getElementById('previewImg');
+  const classifyBtn = document.getElementById('classifyBtn');
+  const resultBox = document.getElementById('result');
+  const resultChip = document.getElementById('resultChip');
+  const resultDot = document.getElementById('resultDot');
+  const resultLabel = document.getElementById('resultLabel');
+  const resultConfidence = document.getElementById('resultConfidence');
+  const rankingBox = document.getElementById('ranking');
+  const errorMsg = document.getElementById('errorMsg');
+
+  let selectedFile = null;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+  });
+
+  function handleFile(file) {
+    if (!file.type.startsWith('image/')) return;
+    selectedFile = file;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target.result;
+      previewWrap.style.display = 'block';
+      classifyBtn.style.display = 'block';
+      resultBox.style.display = 'none';
+      errorMsg.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  classifyBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    classifyBtn.disabled = true;
+    classifyBtn.textContent = 'Classificando...';
+    errorMsg.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('image', selectedFile);
+
+    try {
+      const response = await fetch('/predict', { method: 'POST', body: formData });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao classificar a imagem.');
+      }
+
+      showResult(data.prediction, data.ranking);
+    } catch (err) {
+      errorMsg.textContent = err.message;
+      errorMsg.style.display = 'block';
+    } finally {
+      classifyBtn.disabled = false;
+      classifyBtn.textContent = 'Classificar';
+    }
+  });
+
+  function showResult(prediction, ranking) {
+    resultChip.style.borderLeftColor = prediction.color;
+    resultDot.style.backgroundColor = prediction.color;
+    resultLabel.textContent = prediction.label;
+    resultConfidence.textContent = prediction.confidence + '%';
+
+    rankingBox.innerHTML = '';
+    ranking.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'rank-row';
+      row.innerHTML = `
+        <span class="name">${item.label}</span>
+        <span class="bar-track"><span class="bar-fill" style="width:${item.confidence}%; background:${item.color}"></span></span>
+        <span class="pct">${item.confidence}%</span>
+      `;
+      rankingBox.appendChild(row);
+    });
+
+    resultBox.style.display = 'block';
+  }
+</script>
+
+</body>
+</html>
