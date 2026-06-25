@@ -2,3 +2,5 @@ torch
 torchvision
 flask
 pillow
+scikit-learn
+matplotlib

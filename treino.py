@@ -5,6 +5,9 @@ from torch import nn, optim
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from torchvision import datasets, models, transforms
+import matplotlib.pyplot as plt
+
+from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -132,6 +135,38 @@ def train_epoch(
 
     return average_loss, accuracy
 
+def plot_confusion_matrix(
+    model: nn.Module,
+    loader: DataLoader,
+    classes: list[str],
+    device: torch.device,
+) -> None:
+    model.eval()
+
+    y_true = []
+    y_pred = []
+
+    with torch.no_grad():
+        for images, labels in loader:
+            images = images.to(device, non_blocking=True)
+
+            outputs = model(images)
+            predictions = outputs.argmax(1).cpu().tolist()
+
+            y_pred.extend(predictions)
+            y_true.extend(labels.tolist())
+
+    matrix = confusion_matrix(y_true, y_pred)
+
+    display = ConfusionMatrixDisplay(
+        confusion_matrix=matrix,
+        display_labels=classes,
+    )
+
+    display.plot(xticks_rotation=45)
+    plt.tight_layout()
+    plt.savefig(MODEL_DIR / "confusion_matrix.png")
+    plt.show()
 
 def evaluate(
     model: nn.Module,
@@ -186,7 +221,7 @@ def main() -> None:
             criterion,
             optimizer,
             device,
-            scaler,
+            scaler, 
         )
 
         test_loss, test_accuracy = evaluate(
@@ -203,7 +238,7 @@ def main() -> None:
             f"Test Loss: {test_loss:.4f} | "
             f"Test Acc: {test_accuracy:.2%}"
         )
-
+    plot_confusion_matrix(model, test_loader, classes, device)
     torch.save(
         {
             "model_state": model.state_dict(),
